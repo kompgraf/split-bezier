@@ -29,6 +29,8 @@ GLFWwindow *initializeGLFW();
 
 void gameLoop(GLFWwindow *window);
 
+Point deCasteljau(std::vector<Point> &points, float t);
+void drawBezier();
 
 int main(void)
 {
@@ -152,11 +154,80 @@ GLFWwindow *initializeGLFW()
 	return window;
 }
 
+/*
+ * A de Casteljau algoritmus rekurzív implementációja.
+ *
+ * FIGYELEM: Teljesítménykritikus alkalmazásokban kifejezetten ellenjavallott a rekurzív implementáció
+ * használata, hiszen nem biztos, hogy a fordító a TCO segítségével el tudja kerülni a függvényhívásokat.
+ * Emiatt bevgrafon kizárólag az iteratív változat az elfogadott.
+ *
+ * Jelen esetben azért alkalmazzuk a rekurzív megvalósítást, mert könnyebben olvasható kódot eredményez.
+ */
+Point deCasteljau(std::vector<Point> &points, float t)
+{
+	/*
+	 * A rekurzió alapesete, ha csak egy pont maradt, az a t paraméter értékhez
+	 * tartozó görbepont.
+	 */
+	if (points.size() == 1)
+	{
+		return points[0];
+	}
+	else
+	{
+		/*
+		 * Vegyük észre, hogy a ciklus az utolsó elemig nem fut el, hiszen indextúllépés lenne.
+		 */
+		for (int i = 0; i < points.size() - 1; ++i)
+		{
+			points[i].x = (1 - t) * points[i].x + t * points[i + 1].x;
+			points[i].y = (1 - t) * points[i].y + t * points[i + 1].y;
+		}
+
+		/*
+		 * Az egymást követõ generációk mindig eggyel kevesebb pontot tartalmaznak,
+		 * emiatt egy új generáció elõállítása után a vektor mérete eggyel csökkenthetõ.
+		 */
+		points.pop_back();
+
+		return deCasteljau(points, t);
+	}
+}
+
+void drawBezier()
+{
+	glColor3f(0.0, 1.0, 0.0);
+	glBegin(GL_LINE_STRIP);
+	for (float t = 0; t <= 1.05; t += 0.05)
+	{
+		/*
+		 * Minden hívásnak egy újonnan feltöltött vektort kell átadnunk, mert
+		 * az algoritmus helyben módosítja a vektor elemeit.
+		 */
+		std::vector<Point> points;
+
+		for (auto ptr : controlPoints)
+		{
+			points.push_back(*ptr);
+		}
+
+		auto p = deCasteljau(points, t);
+
+		glVertex2d(p.x, p.y);
+	}
+	glEnd();
+}
+
 void gameLoop(GLFWwindow *window)
 {
 	while (!glfwWindowShouldClose(window))
 	{
 		glClear(GL_COLOR_BUFFER_BIT);
+
+		if (controlPoints.size() > 2)
+		{
+			drawBezier();
+		}
 
 		glColor3f(1.0, 0.0, 0.0);
 		glBegin(GL_POINTS);
