@@ -4,7 +4,7 @@
 #include <vector>
 
 
-constexpr float CLICK_DETECTION_THRESHOLD = 100.0f;
+constexpr double CLICK_DETECTION_THRESHOLD = 100.0;
 constexpr int WINDOW_WIDTH = 800;
 constexpr int WINDOW_HEIGHT = 600;
 
@@ -32,6 +32,9 @@ void gameLoop(GLFWwindow *window);
 Point deCasteljau(std::vector<Point> &points, float t);
 void drawBezier();
 
+void split(std::vector<Point> &points, std::vector<Point> &left, std::vector<Point> &right, float t);
+void drawSplit();
+
 int main(void)
 {
 	GLFWwindow *window = initializeGLFW();
@@ -58,10 +61,10 @@ Point* getClickedPoint(const double xpos, const double ypos)
 
 	for (auto point : controlPoints)
 	{
-		const float diffx = clickPosition.x - point->x;
-		const float diffy = clickPosition.y - point->y;
+		const double diffx = clickPosition.x - point->x;
+		const double diffy = clickPosition.y - point->y;
 
-		const float distanceSquared = diffx * diffx + diffy * diffy;
+		const double distanceSquared = diffx * diffx + diffy * diffy;
 
 		if (distanceSquared <= CLICK_DETECTION_THRESHOLD)
 		{
@@ -178,7 +181,7 @@ Point deCasteljau(std::vector<Point> &points, float t)
 		/*
 		 * Vegyük észre, hogy a ciklus az utolsó elemig nem fut el, hiszen indextúllépés lenne.
 		 */
-		for (int i = 0; i < points.size() - 1; ++i)
+		for (size_t i = 0; i < points.size() - 1; ++i)
 		{
 			points[i].x = (1 - t) * points[i].x + t * points[i + 1].x;
 			points[i].y = (1 - t) * points[i].y + t * points[i + 1].y;
@@ -198,7 +201,7 @@ void drawBezier()
 {
 	glColor3f(0.0, 1.0, 0.0);
 	glBegin(GL_LINE_STRIP);
-	for (float t = 0; t <= 1.05; t += 0.05)
+	for (float t = 0; t <= 1.05; t += 0.05f)
 	{
 		/*
 		 * Minden hívásnak egy újonnan feltöltött vektort kell átadnunk, mert
@@ -218,6 +221,81 @@ void drawBezier()
 	glEnd();
 }
 
+/*
+ * A Bezier-görbét két részre osztó algoritmus rekurzív implementációja.
+ *
+ * FIGYELEM: Teljesítménykritikus alkalmazásokban kifejezetten ellenjavallott a rekurzív implementáció
+ * használata, hiszen nem biztos, hogy a fordító a TCO segítségével el tudja kerülni a függvényhívásokat.
+ * Emiatt bevgrafon kizárólag az iteratív változat az elfogadott.
+ *
+ * Jelen esetben azért alkalmazzuk a rekurzív megvalósítást, mert könnyebben olvasható kódot eredményez.
+ *
+ * Vegyük észre, hogy minden esetben referencia szerint adunk át vektorokat, így mindvégig ugyanazon
+ * vektorokkal fogunk dolgozni, nem lesz másolás.
+ */
+void split(std::vector<Point> &points, std::vector<Point> &left, std::vector<Point> &right, float t)
+{
+	if (points.size() == 1)
+	{
+		/*
+		 * Ha már csak egy pont maradt, az jobbszélsõ és balszélsõ is egyben, így
+		 * mindkét félbe belekerül.
+		 */
+		left.push_back(points[0]);
+		right.push_back(points[0]);
+	}
+	else
+	{
+		/*
+		 * A generáció elsõ eleme a bal, utolsó eleme a jobb félbe kerül.
+		 */
+		left.push_back(points[0]);
+		right.push_back(points[points.size() - 1]);
+
+		/*
+		 * Teljesen azonos a de Casteljau algoritmusban adott kóddal.
+		 */
+		for (size_t i = 0; i < points.size() - 1; ++i)
+		{
+			points[i].x = (1 - t) * points[i].x + t * points[i + 1].x;
+			points[i].y = (1 - t) * points[i].y + t * points[i + 1].y;
+		}
+
+		/*
+		 * A pontok számának szigorúan monoton csökkenése garantálja, hogy a 
+		 * rekurzió nem lesz végtelen.
+		 */
+		points.pop_back();
+
+		split(points, left, right, t);
+	}
+}
+
+void drawSplit()
+{
+	std::vector<Point> left, right, points;
+
+	for (auto ptr : controlPoints)
+	{
+		points.push_back(*ptr);
+	}
+
+	split(points, left, right, 0.5);
+
+	glBegin(GL_POINTS);
+	glColor3f(0.0, 0.0, 1.0);
+	for (auto point : left)
+	{
+		glVertex2d(point.x, point.y);
+	}
+	glColor3f(0.0, 0.0, 0.5);
+	for (auto point : right)
+	{
+		glVertex2d(point.x, point.y);
+	}
+	glEnd();
+}
+
 void gameLoop(GLFWwindow *window)
 {
 	while (!glfwWindowShouldClose(window))
@@ -227,6 +305,8 @@ void gameLoop(GLFWwindow *window)
 		if (controlPoints.size() > 2)
 		{
 			drawBezier();
+
+			drawSplit();
 		}
 
 		glColor3f(1.0, 0.0, 0.0);
